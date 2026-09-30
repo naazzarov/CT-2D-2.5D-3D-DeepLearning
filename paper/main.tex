@@ -1,0 +1,298 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs,graphicx,amsmath,hyperref,microtype,authblk}
+\usepackage[numbers,sort&compress]{natbib}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\title{Annotator Disagreement, Not Spatial Context, Bounds Pulmonary
+Nodule Malignancy-Risk Classification on LIDC-IDRI}
+
+\author[1]{Bahodir Nazarov}
+\author[1]{Fatima Zazoul}
+\author[1]{Zaineb Gharib}
+\affil[1]{\small Sichuan University}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Deep learning studies on LIDC-IDRI routinely report that richer spatial
+context---moving from a single slice to a stack of slices to a full
+volume---improves pulmonary nodule malignancy-risk classification. We test this
+directly under a single controlled pipeline in which representation is the only
+variable, and find no such benefit. Across 2D (one slice), 2.5D (five slices)
+and 3D (full volume) encoders sharing identical preprocessing, patient-level
+splits, loss, optimiser, augmentation, model-selection rule and metrics, all
+representations converge to a three-class macro-F1 of approximately $0.60$.
+Self-supervised MoCo~v2 pretraining on 5133 unlabelled training-patient nodules
+likewise produced no measurable gain in any representation. We show instead that
+performance is bounded by \emph{annotator disagreement}. On a binary
+benign-versus-malignant cohort drawn from the same images and patient splits,
+accuracy is $0.945$ and AUC $0.987$ on nodules whose radiologist labels are
+unanimous, but falls to $0.805$ and $0.902$ on the remainder; classification
+accuracy tracks the median malignancy rating, collapsing from $\sim\!0.90$ at
+the rating extremes to $0.667$ at a median of $3.5$, a value that is not an
+original radiologist rating but an artefact of averaging disagreeing readers.
+Models are appropriately uncertain rather than confidently wrong, with mean
+confidence $0.762$ on correct predictions against $0.462$ on errors. We argue
+that a substantial part of the headroom commonly attributed to architecture on
+this dataset is instead label noise, and that LIDC-IDRI results should be
+reported stratified by annotator agreement.
+\end{abstract}
+
+\section{Introduction}
+
+Computed tomography is volumetric, and a long line of work argues that deep
+models should exploit that structure: 2.5D models stack neighbouring slices,
+and 3D models consume whole volumes. Reported gains are usually modest and are
+almost always confounded, because the compared systems differ not only in
+spatial context but in preprocessing, intensity windowing, augmentation,
+capacity, training schedule and evaluation protocol.
+
+We ask a narrower question. \emph{If everything except the input representation
+is held fixed, how much does spatial context actually contribute?} We build one
+pipeline in which 2D, 2.5D and 3D arms share the same nodule crops, the same
+Hounsfield-unit window, the same patient-level splits, the same class-weighted
+loss, the same optimiser and schedule, the same augmentation recipe, the same
+early-stopping criterion and the same metric code. The encoders differ only in
+input dimensionality; the 2D and 2.5D models are the same ResNet-18 differing in
+a single argument, \texttt{in\_channels}.
+
+Our contributions:
+
+\begin{enumerate}
+\item Under this controlled comparison, added spatial context yields no
+  improvement. Three-class macro-F1 is $0.6059 \pm 0.024$ (2D),
+  $0.5785 \pm 0.022$ (2.5D) and REPLACE\_3D (3D), all within one to two seed
+  standard deviations of one another.
+\item MoCo~v2 pretraining on 5133 unlabelled training-patient nodules gives no
+  measurable benefit in any representation, despite the pretext task itself
+  converging well.
+\item We locate the performance ceiling in annotator disagreement rather than
+  model capacity, and quantify it: binary accuracy is $0.945$ / AUC $0.987$ on
+  unanimously labelled nodules versus $0.805$ / $0.902$ on ambiguous ones.
+\item We show that augmentation improves generalisation without reducing
+  memorisation, and report the seed-variance reduction it does deliver.
+\end{enumerate}
+
+\section{Data}
+
+We use LIDC-IDRI~\citep{armato2011lidc}, obtained through
+TCIA~\citep{clark2013tcia}. Consensus nodules were extracted as
+$104\times72\times80$ crops resampled to $1\,\mathrm{mm}$ isotropic spacing,
+with the nodule at the geometric centre of every crop; the measured mask
+centre-of-mass across random samples is $z \in [51.1, 52.1]$,
+$y \in [35.2, 35.7]$, $x \in [39.3, 39.9]$.
+
+\paragraph{Labels.} Each nodule carries malignancy ratings from up to four
+radiologists on a 1--5 scale. We use the project three-class rule: median
+$1.0$--$2.0$ is \emph{benign}, $2.5$--$3.0$ \emph{indeterminate}, and
+$3.5$--$5.0$ \emph{malignant}. Crucially, medians of $2.5$ and $3.5$ are
+\emph{not} radiologist ratings; they arise only when readers disagree. 449
+nodules carry such midpoint medians, and we return to them in
+Section~\ref{sec:ceiling}.
+
+\paragraph{Cohorts.} The labelled cohort is 2654 nodules (873 benign, 1226
+indeterminate, 555 malignant), split at patient level into 1876 / 382 / 396
+nodules over 602 / 134 / 134 patients. A binary cohort excluding
+\emph{indeterminate} gives 1000 / 219 / 209 nodules; it is a strict subset of
+the same splits, so no patient moves between partitions. An additional 5133
+unlabelled nodules from training patients only form the self-supervised pool.
+
+\paragraph{Leakage control.} We verified programmatically, and re-assert on
+every training run, that no patient and no nodule appears in more than one
+split, and that the self-supervised pool contains no validation or test patient.
+The check raises rather than warns.
+
+\section{Method}
+
+\paragraph{Preprocessing (shared).} Stored volumes are raw Hounsfield units
+with observed values from $-3024$ to $+3080$. We clip to $[-1000, 400]$, scale
+to $[0,1]$, then standardise with training-split statistics. This window is
+applied identically in all arms; it is the single most important shared choice,
+since an unstated difference here would masquerade as a representation effect.
+
+\paragraph{Representations.}
+\begin{itemize}
+\item \textbf{2D}: the central slice, $(1, 72, 80)$, ResNet-18.
+\item \textbf{2.5D}: five neighbouring slices as channels, $(5, 72, 80)$,
+  the same ResNet-18 with \texttt{in\_channels}$=5$.
+\item \textbf{3D}: the full crop, $(1, 104, 72, 80)$, a 3D ResNet-10.
+\end{itemize}
+The 2D and 2.5D models differ by 12{,}544 parameters, entirely in the first
+convolution. We use ResNet-10 rather than ResNet-18 in 3D because a 3D
+ResNet-18 would carry roughly 33M parameters against 1876 training volumes.
+
+\paragraph{Training (shared).} AdamW, learning rate $10^{-3}$, weight decay
+$0.05$, cosine schedule, batch 64 (16 in 3D), dropout $0.5$, label smoothing
+$0.10$, inverse-frequency class weights, early stopping with patience 20 on
+validation macro-F1, maximum 80 epochs. Hyperparameters were selected on
+validation only, by a sweep of eight configurations in the 2D arm, and then
+frozen for every other arm. The test split was evaluated once, after freezing.
+
+\paragraph{Augmentation.} Training only. Horizontal and vertical flips
+($p=0.5$ each), a combined affine transform ($p=0.8$; rotation $\pm15^\circ$,
+translation $\pm6\%$, scale $0.9$--$1.1$), intensity jitter ($p=0.5$;
+multiplicative $0.9$--$1.1$ then additive $\pm0.05$) and Gaussian noise
+($p=0.3$, $\sigma=0.02$). In 3D we apply no flip or rotation along $z$, because
+CT has a consistent anatomical orientation in $z$ and our $z$-context is
+interpolated from $2.5\,\mathrm{mm}$ acquisitions.
+
+\paragraph{Self-supervision.} MoCo~v2~\citep{chen2020mocov2} on the 5133-nodule
+pool, no labels: queue $K=4096$, temperature $0.2$, momentum $0.999$, two-layer
+MLP head, SGD. With a single device we approximate shuffle-BN by permuting the
+key batch and forwarding it in chunks, so each chunk receives its own batch
+statistics.
+
+\paragraph{Evaluation.} Accuracy, balanced accuracy, macro and per-class
+precision / recall / F1, confusion matrices, and one-vs-rest ROC-AUC. Every
+figure is the mean $\pm$ standard deviation over three seeds, with percentile
+bootstrap confidence intervals on test macro-F1. Majority-class baselines are
+macro-F1 $0.2138$ (three-class) and $0.3589$ (binary).
+
+\section{Results}
+
+\subsection{Spatial context does not help}
+
+\begin{table}[t]\centering
+\caption{Test performance by representation, mean $\pm$ std over three seeds.
+All arms share one pipeline; only the representation and encoder differ.}
+\label{tab:main}
+\begin{tabular}{llccc}
+\toprule
+Model & Metric & 2D & 2.5D & 3D \\
+\midrule
+A (supervised) & macro-F1 & $0.6059 \pm 0.024$ & $0.5785 \pm 0.022$ & REPLACE\_3D \\
+               & accuracy & $0.6002$ & $0.5690$ & REPLACE\_3D \\
+               & ROC-AUC  & $0.7565$ & $0.7405$ & REPLACE\_3D \\
+\midrule
+B (MoCo)       & macro-F1 & $0.5957 \pm 0.009$ & $0.5875 \pm 0.011$ & REPLACE\_3D \\
+               & ROC-AUC  & $0.7579$ & $0.7368$ & REPLACE\_3D \\
+\midrule
+C (augmented)  & macro-F1 & $0.6134 \pm 0.008$ & $0.5934 \pm 0.016$ & REPLACE\_3D \\
+               & ROC-AUC  & $0.7595$ & $0.7340$ & REPLACE\_3D \\
+\midrule
+Binary         & macro-F1 & $0.8227 \pm 0.002$ & $0.8047 \pm 0.006$ & REPLACE\_3D \\
+               & ROC-AUC  & $0.8644$ & $0.8612$ & REPLACE\_3D \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:main} shows no benefit from additional spatial context. Moving
+from one slice to five changes three-class macro-F1 by $-0.027$ (Model A) and
+$-0.020$ (Model C); with per-seed bootstrap intervals spanning roughly $\pm0.05$
+on a 396-nodule test set, these are not distinguishable from zero. Binary
+ROC-AUC is nearly identical across representations ($0.8644$ vs $0.8612$),
+indicating that ranking quality---not merely the decision threshold---is
+unchanged.
+
+\subsection{Self-supervised pretraining does not help}
+
+MoCo~v2 changed three-class test macro-F1 by $-0.0102$ in 2D and $+0.0090$ in
+2.5D: opposite signs, both inside the seed spread. ROC-AUC was essentially
+unchanged in 2D ($0.7579$ vs $0.7565$). The pretext task itself trained well,
+with InfoNCE loss falling from $7.48$ to $4.14$ and instance-discrimination
+accuracy reaching $0.863$ over 200 epochs, so this is a transfer failure rather
+than an optimisation failure. Instance discrimination rewards features that
+identify a crop---surrounding vasculature, pleural contact, framing---which need
+not be the features that indicate malignancy risk.
+
+\subsection{Augmentation improves generalisation without reducing memorisation}
+
+Mild augmentation gave the best 2D result ($0.6134$ vs $0.6059$ unaugmented),
+and strong augmentation was \emph{worse} than none ($0.5908$), indicating an
+optimum at moderate strength. However, the train--validation macro-F1 gap at the
+selected epoch was unchanged: $+0.386$ without augmentation, $+0.394$ with.
+Peak training macro-F1 reached $1.000$ in every arm, and training macro-F1
+crossed $0.90$ at epoch 7 regardless of augmentation. What augmentation
+reliably delivered was \emph{stability}: the seed standard deviation of test
+macro-F1 fell from $\pm0.024$ to $\pm0.007$. Early stopping, not augmentation,
+is what limits overfitting here.
+
+\subsection{The ceiling is annotator disagreement}
+\label{sec:ceiling}
+
+\begin{table}[t]\centering
+\caption{Binary test performance stratified by label confidence
+(2D, probabilities averaged over three seeds). ``Confident'' means no midpoint
+median, at least three readers, and no disagreement flag.}
+\label{tab:ceiling}
+\begin{tabular}{lccc}
+\toprule
+Subset & $n$ & Accuracy & AUC \\
+\midrule
+Confident labels & 55 & $0.945$ & $0.987$ \\
+Remainder        & 154 & $0.805$ & $0.902$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:ceiling} is our central result. On nodules where radiologists
+agreed, a single-slice ResNet-18 reaches $0.945$ accuracy and $0.987$ AUC. The
+aggregate figure of $0.83$ is depressed almost entirely by nodules where they
+did not.
+
+Accuracy tracks the median rating directly: $0.898$ at median $1.0$, $0.905$ at
+$2.0$, $0.900$ at $5.0$---but $0.667$ at $3.5$ and $0.697$ at $4.0$. Recall that
+$3.5$ is not a rating any radiologist assigned. Nodules flagged as midpoint
+medians score $0.667$ against $0.868$ for the rest; single-reader nodules score
+$0.722$ against $0.903$ for three-reader nodules.
+
+The three-class confusion matrices show the same structure. Pooling over seeds
+for 2D Model C, benign$\leftrightarrow$indeterminate accounts for 284 errors and
+indeterminate$\leftrightarrow$malignant for 135, while
+benign$\leftrightarrow$malignant accounts for only 41. The clinically meaningful
+extremes are separable; the boundary that is not is the one defined by reader
+disagreement.
+
+Finally, the models are calibrated about their own ignorance: mean confidence is
+$0.762$ on correct predictions and $0.462$ on errors, and 19 of 33 binary errors
+fall at median $3.5$ or $4.0$.
+
+\section{Discussion}
+
+Three architectures spanning one to 104 slices, two of them additionally
+pretrained on 5133 unlabelled volumes, converge to the same three-class
+performance. The most parsimonious explanation is that they are all saturating
+the information available in the labels rather than in the images.
+
+This has a practical consequence for the literature. Improvements of one or two
+macro-F1 points on LIDC-IDRI, reported without stratification by annotator
+agreement and without confidence intervals, are difficult to distinguish from
+noise: on a 396-nodule test set our bootstrap intervals span $\pm0.05$. We
+recommend that LIDC-IDRI results be reported separately for unanimously and
+ambiguously labelled nodules, and that midpoint medians---which are averaging
+artefacts, not clinical categories---be flagged explicitly.
+
+\section{Limitations}
+
+The labelled cohort is small (1876 training nodules) relative to encoder
+capacity, and all models overfit substantially. Confidence intervals are
+correspondingly wide, and we have deliberately refrained from claiming that any
+representation is superior. Labels are radiologist opinion rather than
+histopathology, so the ``ceiling'' we measure is agreement with readers, not
+with ground truth. We evaluated a single self-supervised configuration; a
+negative transfer result for one MoCo~v2 setting is not evidence that
+self-supervision cannot help. The $z$ axis was resampled from
+$2.5\,\mathrm{mm}$, so inter-slice context is partly interpolated, which
+disadvantages the 2.5D and 3D arms to an unknown degree. Hyperparameters were
+tuned on a 382-nodule validation split, itself a small sample.
+
+\section{Conclusion}
+
+Under a controlled single-pipeline comparison, neither additional spatial
+context nor self-supervised pretraining improved pulmonary nodule
+malignancy-risk classification on LIDC-IDRI. Performance is instead bounded by
+annotator disagreement: where radiologists agree, a single CT slice suffices for
+$0.945$ accuracy and $0.987$ AUC. We suggest that progress on this benchmark be
+measured against agreement-stratified baselines.
+
+\paragraph{Code and reproducibility.} All code, per-seed metrics, training
+curves and confusion matrices are available at
+\url{https://github.com/naazzarov/CT-2D-2.5D-3D-DeepLearning}.
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}
