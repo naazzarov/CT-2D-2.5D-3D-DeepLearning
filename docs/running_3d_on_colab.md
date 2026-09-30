@@ -11,17 +11,17 @@ T4 does the same work in hours.
 **1. Pack the volumes (local, ~20 min)**
 
 ```bash
-.venv/bin/python scripts/export_volumes_int16.py ~/volumes_int16.npy
+.venv/bin/python scripts/export_volumes_fp16.py ~/volumes_fp16.npy
 ```
 
 Stored HU values are integral in [−3024, 3080], so int16 is **lossless** and
 halves the size: 17 GB → ~8.5 GB. The script verifies losslessness on 25 random
-volumes before writing anything, and emits `volumes_int16_index.json` mapping
+volumes before writing anything, and emits `volumes_fp16_index.json` mapping
 `consensus_nodule_id` → row.
 
 **2. Upload to Google Drive** into a folder such as `MyDrive/ct_project/`:
 
-- `volumes_int16.npy` and `volumes_int16_index.json`
+- `volumes_fp16.npy` and `volumes_fp16_index.json`
 - the `metadata/` folder from `final_team_dataset_v2_3class`
 - the `binary_sensitivity_team_package/` folder
 
