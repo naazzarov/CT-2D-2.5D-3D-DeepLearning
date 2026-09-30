@@ -8,6 +8,7 @@ from torch.utils.data import Dataset
 
 from src.common import config as C
 from src.common import cache as cache_mod
+from src.common import cache25 as cache25_mod
 from src.common.transforms import augment_moco, augment_supervised, window_hu
 
 
@@ -105,16 +106,21 @@ def class_weights(train: pd.DataFrame, task: str = "3class") -> torch.Tensor:
 
 # ------------------------------------------------------------------- datasets
 class CentralSliceDataset(Dataset):
-    """Single central CT slice -> 3-class label. This is the 2D input.
+    """CT slice(s) -> class label.
 
-    Returns x of shape (1, 72, 80), windowed to [0, 1] then standardised with
-    train-set statistics.
+    rep="2d"    -> x of shape (1, 72, 80), the defined central slice 52.
+    rep="2p5d"  -> x of shape (5, 72, 80), slices 50..54.
+
+    Both go through identical windowing, augmentation and standardisation, so
+    the only difference between the representations is how much context the
+    channel dimension carries.
     """
 
     def __init__(self, df: pd.DataFrame, mean: float, std: float,
                  train: bool = False, seed: int = 0, aug: str = "mild",
-                 task: str = "3class"):
-        arr, index = cache_mod.load()
+                 task: str = "3class", rep: str = "2d"):
+        arr, index = (cache25_mod.load() if rep == "2p5d" else cache_mod.load())
+        self.rep = rep
         self.arr = arr
         self.rows = np.array([index[i] for i in df[C.ID_COL]], dtype=np.int64)
         self.labels = df[C.TASKS[task]["label_col"]].to_numpy(dtype=np.int64)
@@ -133,7 +139,11 @@ class CentralSliceDataset(Dataset):
 
     def __getitem__(self, i: int):
         x = window_hu(np.asarray(self.arr[self.rows[i]]))
-        x = torch.from_numpy(x).unsqueeze(0)             # (1, H, W)
+        x = torch.from_numpy(x)
+        if self.rep == "2d":
+            x = x.unsqueeze(0)                            # (1, H, W)
+        # 2.5D is already (5, H, W); the spatial augmentation below applies the
+        # SAME transform to every channel, so the slices stay aligned.
         if self.train:
             rng = np.random.default_rng((self._seed, self.epoch, i))
             x = augment_supervised(x, rng, strength=self.aug)
@@ -144,8 +154,10 @@ class CentralSliceDataset(Dataset):
 class MoCoPairDataset(Dataset):
     """Two independently augmented views of the same central slice, no labels."""
 
-    def __init__(self, df: pd.DataFrame, mean: float, std: float, seed: int = 0):
-        arr, index = cache_mod.load()
+    def __init__(self, df: pd.DataFrame, mean: float, std: float, seed: int = 0,
+                 rep: str = "2d"):
+        arr, index = (cache25_mod.load() if rep == "2p5d" else cache_mod.load())
+        self.rep = rep
         self.arr = arr
         self.rows = np.array(
             [index[i] for i in df[C.ID_COL] if i in index], dtype=np.int64
@@ -162,16 +174,18 @@ class MoCoPairDataset(Dataset):
 
     def __getitem__(self, i: int):
         base = window_hu(np.asarray(self.arr[self.rows[i]]))
-        base = torch.from_numpy(base).unsqueeze(0)
+        base = torch.from_numpy(base)
+        if self.rep == "2d":
+            base = base.unsqueeze(0)
         rng = np.random.default_rng((self._seed, self.epoch, i))
         q = (augment_moco(base, rng) - self.mean) / self.std
         k = (augment_moco(base, rng) - self.mean) / self.std
         return q, k
 
 
-def train_statistics(train: pd.DataFrame) -> tuple[float, float]:
+def train_statistics(train: pd.DataFrame, rep: str = "2d") -> tuple[float, float]:
     """Mean/std of windowed intensities over the TRAINING split only."""
-    arr, index = cache_mod.load()
+    arr, index = (cache25_mod.load() if rep == "2p5d" else cache_mod.load())
     rows = np.array([index[i] for i in train[C.ID_COL]], dtype=np.int64)
     vals = window_hu(np.asarray(arr[np.sort(rows)]))
     return float(vals.mean()), float(vals.std())

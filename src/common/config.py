@@ -51,6 +51,11 @@ SAMPLE_SHAPE_ZYX = (104, 72, 80)
 CENTRAL_SLICE = SAMPLE_SHAPE_ZYX[0] // 2   # 52 -> the "defined central slice"
 SLICE_HW = SAMPLE_SHAPE_ZYX[1:]            # (72, 80)
 
+# 2.5D: the agreed 5 neighbouring slices, centred on CENTRAL_SLICE -> 50..54.
+N_NEIGHBOUR_SLICES = 5
+SLICE_WINDOW = (CENTRAL_SLICE - N_NEIGHBOUR_SLICES // 2,
+                CENTRAL_SLICE + N_NEIGHBOUR_SLICES // 2 + 1)   # (50, 55)
+
 # ------------------------------------------------------------- HU windowing
 # Arrays are stored as RAW Hounsfield units (not normalised), so the window is
 # our choice. Observed range across 120 random samples: minima to -3024

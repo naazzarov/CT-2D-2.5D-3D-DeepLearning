@@ -1,4 +1,4 @@
-"""MoCo v2 self-supervised pretraining for the 2D encoder (Model B, stage 1).
+"""MoCo v2 self-supervised pretraining for the 3D encoder (Model B, stage 1).
 
 Frozen team decision: MoCo v2-style contrastive pretraining, on the shared pool
 `metadata/ssl_pretrain_train.csv` (5133 nodules, TRAIN patients only -- verified
@@ -29,8 +29,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from src.common import config as C
-from src.common.data import (MoCoPairDataset, assert_no_leakage, load_splits,
-                             load_ssl_pool, train_statistics)
+from src.common.data import assert_no_leakage, load_splits, load_ssl_pool
+from src.common.data3d import VolumeMoCoDataset, volume_train_statistics
 from src.common.seed import device, set_seed
 from model import build_encoder  # noqa: E402
 
@@ -54,8 +54,8 @@ class MoCo(nn.Module):
         self.K, self.m, self.T = K, m, T
         self.encoder_q = build_encoder(in_channels)
         self.encoder_k = build_encoder(in_channels)
-        self.head_q = ProjectionHead(dim_out=dim)
-        self.head_k = ProjectionHead(dim_out=dim)
+        self.head_q = ProjectionHead(dim_in=self.encoder_q.out_dim, dim_out=dim)
+        self.head_k = ProjectionHead(dim_in=self.encoder_k.out_dim, dim_out=dim)
         for pq, pk in ((self.encoder_q, self.encoder_k), (self.head_q, self.head_k)):
             pk.load_state_dict(pq.state_dict())
             for p in pk.parameters():
@@ -108,18 +108,18 @@ class MoCo(nn.Module):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--epochs", type=int, default=200)
-    ap.add_argument("--batch-size", type=int, default=128)
-    ap.add_argument("--lr", type=float, default=0.015)   # MoCo v2 0.03 @ bs 256
+    ap.add_argument("--batch-size", type=int, default=32)
+    ap.add_argument("--lr", type=float, default=0.004)   # MoCo v2 0.03 @ bs 256
     ap.add_argument("--wd", type=float, default=1e-4)
     ap.add_argument("--K", type=int, default=4096)
     ap.add_argument("--T", type=float, default=0.2)
     ap.add_argument("--m", type=float, default=0.999)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--rep", choices=["2d", "2p5d"], default="2d")
+    ap.add_argument("--workers", type=int, default=2)
+    ap.add_argument("--batch-size-override", type=int, default=0)
     args = ap.parse_args()
 
-    out = C.RESULTS_DIR / args.rep / "moco"
+    out = C.RESULTS_DIR / "3d" / "moco"
     out.mkdir(parents=True, exist_ok=True)
     set_seed(args.seed)
     dev = device()
@@ -130,15 +130,14 @@ def main() -> None:
     print(f"SSL pool {len(ssl)} nodules / {ssl[C.PATIENT_COL].nunique()} patients "
           "- no val/test patients present")
 
-    mean, std = train_statistics(splits["train"], rep=args.rep)
-    ds = MoCoPairDataset(ssl, mean, std, seed=args.seed, rep=args.rep)
+    mean, std = volume_train_statistics(splits["train"])
+    ds = VolumeMoCoDataset(ssl, mean, std, seed=args.seed)
     dl = DataLoader(ds, batch_size=args.batch_size, shuffle=True, drop_last=True,
                     num_workers=args.workers,
                     persistent_workers=args.workers > 0)
-    print(f"usable cached nodules {len(ds)} | batches/epoch {len(dl)} | device {dev}")
+    print(f"usable volumes {len(ds)} | batches/epoch {len(dl)} | device {dev}")
 
-    in_ch = C.N_NEIGHBOUR_SLICES if args.rep == "2p5d" else 1
-    moco = MoCo(in_channels=in_ch, K=args.K, m=args.m, T=args.T).to(dev)
+    moco = MoCo(in_channels=1, K=args.K, m=args.m, T=args.T).to(dev)
     params = [p for p in moco.parameters() if p.requires_grad]
     opt = torch.optim.SGD(params, lr=args.lr, momentum=0.9, weight_decay=args.wd)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)

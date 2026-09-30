@@ -58,6 +58,9 @@ def evaluate(model, loader, dev, criterion,
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--task", choices=["3class", "binary"], default="3class")
+    ap.add_argument("--rep", choices=["2d", "2p5d"], default="2d",
+                    help="2d = central slice (1 channel); "
+                         "2p5d = 5 neighbouring slices (5 channels)")
     ap.add_argument("--init", choices=["random", "moco"], default="random")
     ap.add_argument("--moco-ckpt", type=str, default="")
     ap.add_argument("--seed", type=int, default=0)
@@ -83,7 +86,7 @@ def main() -> None:
     if args.task == "binary":
         default_tag = "binary_supervised"
     tag = args.tag or default_tag
-    out = C.RESULTS_DIR / "2d" / tag / f"seed{args.seed}"
+    out = C.RESULTS_DIR / args.rep / tag / f"seed{args.seed}"
     out.mkdir(parents=True, exist_ok=True)
 
     set_seed(args.seed)
@@ -100,15 +103,17 @@ def main() -> None:
 
     # Intensity statistics always come from the 3-class TRAIN split so that the
     # binary and 3-class models see identically scaled inputs.
-    mean, std = train_statistics(load_splits("3class")["train"])
+    mean, std = train_statistics(load_splits("3class")["train"], rep=args.rep)
     print(f"train-set windowed intensity: mean {mean:.4f} std {std:.4f}")
 
     ds = {
         "train": CentralSliceDataset(splits["train"], mean, std, train=True,
                                      seed=args.seed, aug=args.aug,
-                                     task=args.task),
-        "val": CentralSliceDataset(splits["val"], mean, std, task=args.task),
-        "test": CentralSliceDataset(splits["test"], mean, std, task=args.task),
+                                     task=args.task, rep=args.rep),
+        "val": CentralSliceDataset(splits["val"], mean, std, task=args.task,
+                                   rep=args.rep),
+        "test": CentralSliceDataset(splits["test"], mean, std, task=args.task,
+                                    rep=args.rep),
     }
     dl = {
         "train": DataLoader(ds["train"], batch_size=args.batch_size, shuffle=True,
@@ -118,7 +123,8 @@ def main() -> None:
         "test": DataLoader(ds["test"], batch_size=128, num_workers=0),
     }
 
-    model = ResNet18Classifier(in_channels=1, num_classes=num_classes,
+    in_ch = C.N_NEIGHBOUR_SLICES if args.rep == "2p5d" else 1
+    model = ResNet18Classifier(in_channels=in_ch, num_classes=num_classes,
                                dropout=args.dropout).to(dev)
     if args.init == "moco":
         if not args.moco_ckpt:
@@ -205,6 +211,7 @@ def main() -> None:
         "epochs_run": len(hist["epoch"]), "best_epoch": best_epoch,
         "best_val_macro_f1": best_f1, "train_minutes": mins,
         "params": n_params(model),
+        "rep": args.rep, "in_channels": in_ch,
         "hu_window": [C.HU_MIN, C.HU_MAX], "central_slice": C.CENTRAL_SLICE,
         "train_mean": mean, "train_std": std,
         "args": vars(args), "validation": val_m, "test": test_m, "history": hist,
