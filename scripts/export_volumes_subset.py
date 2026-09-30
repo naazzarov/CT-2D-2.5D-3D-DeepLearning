@@ -9,7 +9,7 @@ faster and fits a free Kaggle dataset (20 GB limit) comfortably.
 """
 from __future__ import annotations
 
-import json, sys
+import json, sys, time
 from pathlib import Path
 
 import numpy as np
@@ -54,13 +54,43 @@ def main() -> None:
         raise SystemExit("float16 error above tolerance")
 
     n = len(ids)
-    out = np.lib.format.open_memmap(OUT, mode="w+", dtype=np.float16,
-                                    shape=(n, *C.SAMPLE_SHAPE_ZYX))
-    for i, rel in enumerate(paths):
-        out[i] = np.load(C.DATA_ROOT / rel, mmap_mode="r").astype(np.float16)
-        if (i + 1) % 500 == 0:
+    # Resumable: a sidecar records how many rows are written, so an I/O stall
+    # (iCloud fetching an offloaded file, for instance) costs one row, not the
+    # whole export.
+    prog = OUT.with_name(OUT.stem + ".progress")
+    start = 0
+    if OUT.exists() and prog.exists():
+        try:
+            saved = json.loads(prog.read_text())
+            if saved.get("n") == n:
+                start = int(saved.get("done", 0))
+                print(f"resuming from volume {start}/{n}")
+        except Exception:  # noqa: BLE001
+            start = 0
+
+    mode = "r+" if (start and OUT.exists()) else "w+"
+    out = (np.lib.format.open_memmap(OUT, mode="r+") if mode == "r+"
+           else np.lib.format.open_memmap(OUT, mode="w+", dtype=np.float16,
+                                          shape=(n, *C.SAMPLE_SHAPE_ZYX)))
+    for i in range(start, n):
+        src = C.DATA_ROOT / paths[i]
+        for attempt in range(5):
+            try:
+                out[i] = np.load(src, mmap_mode="r").astype(np.float16)
+                break
+            except (OSError, TimeoutError) as exc:
+                if attempt == 4:
+                    raise SystemExit(f"giving up on {ids[i]} after 5 tries: {exc}")
+                wait = 2 ** attempt
+                print(f"  retry {attempt + 1} for {ids[i]} in {wait}s ({exc})",
+                      flush=True)
+                time.sleep(wait)
+        if (i + 1) % 200 == 0:
+            out.flush()
+            prog.write_text(json.dumps({"n": n, "done": i + 1}))
             print(f"  {i + 1}/{n}", flush=True)
     out.flush(); del out
+    prog.write_text(json.dumps({"n": n, "done": n}))
     OUT.with_name(OUT.stem + "_index.json").write_text(
         json.dumps({nid: i for i, nid in enumerate(ids)}))
     print(f"wrote {OUT} ({OUT.stat().st_size / 1e9:.2f} GB) covering {n} volumes")
