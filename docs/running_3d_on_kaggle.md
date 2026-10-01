@@ -64,7 +64,15 @@ Upload `notebooks/3d_kaggle.ipynb` to kaggle.com/code, then in **Settings**:
 
 - **Accelerator**: GPU T4 x2 (or P100)
 - **Internet**: On — required to clone the repo
-- **Add Input**: attach your `ct-nodule-volumes` dataset
+- **Add Input**: attach **both** datasets:
+  - `ct-nodule-volumes` — the packed fp16 volumes (7 GB) + binary package
+  - `ct-nodule-metadata` — the 3-class split CSVs (3 MB)
+
+  Two datasets because `qc_exclusions.csv` and `ssl_pretrain_train.csv` were
+  truncated to 0 bytes while staging the 7 GB upload (iCloud placeholder files
+  copied before they had materialised). Re-sending 7 GB to fix 9 MB was not
+  worth it, so the CSVs live in their own dataset and the notebook reads them
+  from there, asserting each one is non-empty before training.
 
 Store your GitHub token as a Kaggle Secret named `GITHUB_TOKEN`
 (*Add-ons → Secrets*) so it never appears in the notebook.
