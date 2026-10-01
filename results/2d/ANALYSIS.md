@@ -232,8 +232,12 @@ correct one is **`binary_class_index`** (0 = benign, 1 = malignant). The legacy
 (731 of 1000 in train); reading it silently corrupts the labels. Our loader now
 raises on empty label values.
 
-**One decision that needs ratifying:** the HU window was never specified in the
-protocol. Raw values in the stored arrays range from −3024 to +3080, so training
+**HU window — now ratified (2026-10-01).** The window was never specified in the
+original protocol, and all three members confirmed independently that they use
+clip [-1000, 400] -> [0,1]. The three-way comparison therefore isolates spatial
+context rather than preprocessing. Original note follows.
+
+The HU window was never specified in the protocol. Raw values in the stored arrays range from −3024 to +3080, so training
 requires clipping. I used **clip [−1000, 400] → [0,1]**, then standardised with
 the 3-class train-split mean/std (0.3651 / 0.3145), documented in
 `docs/preprocessing_contract.md`. If Fatima or Zaineb used a different window,

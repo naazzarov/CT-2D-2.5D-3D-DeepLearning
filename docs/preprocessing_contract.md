@@ -36,6 +36,10 @@ minima down to **−3024** (out-of-FOV padding; 16/120 samples fell below −110
 and maxima up to **+3080**. Normalising without clipping lets those outliers
 dominate the scale.
 
+**Status: ratified by the team (2026-10-01).** All three members confirmed they
+use this same window, so the 2D / 2.5D / 3D comparison isolates spatial context
+rather than preprocessing.
+
 **Agreed rule** (`src/common/transforms.window_hu`):
 
 ```python
