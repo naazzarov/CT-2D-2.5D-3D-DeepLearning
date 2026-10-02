@@ -28,8 +28,8 @@ splits, loss, optimiser, augmentation, model-selection rule and metrics, all
 representations converge to a three-class macro-F1 of approximately $0.60$.
 Self-supervised MoCo~v2 pretraining on 5133 unlabelled training-patient nodules
 produced no measurable gain in the 2D and 2.5D arms, and an apparent gain only
-in the 3D arm, where validation did not reliably rank configurations. We show instead that
-performance is bounded by \emph{annotator disagreement}. On a binary
+in the 3D arm, where validation did not reliably rank configurations. We show
+instead that performance is bounded by \emph{annotator disagreement}. On a binary
 benign-versus-malignant cohort drawn from the same images and patient splits,
 accuracy is $0.945$ and AUC $0.987$ on nodules whose radiologist labels are
 unanimous, but falls to $0.805$ and $0.902$ on the remainder; classification
@@ -212,7 +212,7 @@ supervised baseline ($0.6083$ vs $0.5653$) and $+0.035$ over the augmented model
 ($0.5738$), making the pretrained model the strongest 3D configuration we
 obtained. The pattern across representations is consistent with pretraining
 mattering in proportion to how data-starved supervised training is: the 3D
-encoder carries $14.4$M parameters against $1{,}428$ training volumes, where the
+encoder carries $14.4$M parameters against $1876$ training volumes, where the
 2D encoder sees the same patients as $11.2$M parameters over far simpler inputs.
 
 We report this as an observation rather than a claim. In the 3D arm, validation
@@ -283,7 +283,7 @@ macro-F1. The most parsimonious explanation is that they are all saturating the
 information available in the labels rather than in the images. On that reading,
 pretraining helps the 3D encoder not by supplying information the images lacked
 but by partially compensating for the optimisation disadvantage of fitting
-$14.4$M parameters to $1{,}428$ volumes---it moves the weakest representation up
+$14.4$M parameters to $1876$ volumes---it moves the weakest representation up
 to the common ceiling rather than through it.
 
 This has a practical consequence for the literature. Improvements of one or two
