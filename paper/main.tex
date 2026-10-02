@@ -26,7 +26,8 @@ and 3D (full volume) encoders sharing identical preprocessing, patient-level
 splits, loss, optimiser, augmentation, model-selection rule and metrics, all
 representations converge to a three-class macro-F1 of approximately $0.60$.
 Self-supervised MoCo~v2 pretraining on 5133 unlabelled training-patient nodules
-likewise produced no measurable gain in any representation. We show instead that
+produced no measurable gain in the 2D and 2.5D arms, and an apparent gain only
+in the 3D arm, where validation did not reliably rank configurations. We show instead that
 performance is bounded by \emph{annotator disagreement}. On a binary
 benign-versus-malignant cohort drawn from the same images and patient splits,
 accuracy is $0.945$ and AUC $0.987$ on nodules whose radiologist labels are
@@ -64,11 +65,13 @@ Our contributions:
 \begin{enumerate}
 \item Under this controlled comparison, added spatial context yields no
   improvement. Three-class macro-F1 is $0.6059 \pm 0.024$ (2D),
-  $0.5785 \pm 0.022$ (2.5D) and REPLACE\_3D (3D), all within one to two seed
+  $0.5785 \pm 0.022$ (2.5D) and $0.5653 \pm 0.041$ (3D), all within one to two seed
   standard deviations of one another.
 \item MoCo~v2 pretraining on 5133 unlabelled training-patient nodules gives no
-  measurable benefit in any representation, despite the pretext task itself
-  converging well.
+  measurable benefit in the 2D or 2.5D arms despite the pretext task itself
+  converging well. It does improve the 3D arm by $+0.043$ macro-F1, but 3D
+  validation ranked configurations inconsistently with test, so we treat this
+  as an observation requiring more seeds rather than a result.
 \item We locate the performance ceiling in annotator disagreement rather than
   model capacity, and quantify it: binary accuracy is $0.945$ / AUC $0.987$ on
   unanimously labelled nodules versus $0.805$ / $0.902$ on ambiguous ones.
@@ -163,40 +166,60 @@ All arms share one pipeline; only the representation and encoder differ.}
 \toprule
 Model & Metric & 2D & 2.5D & 3D \\
 \midrule
-A (supervised) & macro-F1 & $0.6059 \pm 0.024$ & $0.5785 \pm 0.022$ & REPLACE\_3D \\
-               & accuracy & $0.6002$ & $0.5690$ & REPLACE\_3D \\
-               & ROC-AUC  & $0.7565$ & $0.7405$ & REPLACE\_3D \\
+A (supervised) & macro-F1 & $0.6059 \pm 0.024$ & $0.5785 \pm 0.022$ & $0.5653 \pm 0.041$ \\
+               & accuracy & $0.6002$ & $0.5690$ & $0.5564$ \\
+               & ROC-AUC  & $0.7565$ & $0.7405$ & $0.7223$ \\
 \midrule
-B (MoCo)       & macro-F1 & $0.5957 \pm 0.009$ & $0.5875 \pm 0.011$ & REPLACE\_3D \\
-               & ROC-AUC  & $0.7579$ & $0.7368$ & REPLACE\_3D \\
+B (MoCo)       & macro-F1 & $0.5957 \pm 0.009$ & $0.5875 \pm 0.011$ & $\mathbf{0.6083} \pm 0.008$ \\
+               & ROC-AUC  & $0.7579$ & $0.7368$ & $0.7373$ \\
 \midrule
-C (augmented)  & macro-F1 & $0.6134 \pm 0.008$ & $0.5934 \pm 0.016$ & REPLACE\_3D \\
-               & ROC-AUC  & $0.7595$ & $0.7340$ & REPLACE\_3D \\
+C (augmented)  & macro-F1 & $0.6134 \pm 0.008$ & $0.5934 \pm 0.016$ & $0.5738 \pm 0.013$ \\
+               & ROC-AUC  & $0.7595$ & $0.7340$ & $0.7197$ \\
 \midrule
-Binary         & macro-F1 & $0.8227 \pm 0.002$ & $0.8047 \pm 0.006$ & REPLACE\_3D \\
-               & ROC-AUC  & $0.8644$ & $0.8612$ & REPLACE\_3D \\
+Binary         & macro-F1 & $0.8227 \pm 0.002$ & $0.8047 \pm 0.006$ & $0.7866 \pm 0.031$ \\
+               & ROC-AUC  & $0.8644$ & $0.8612$ & $0.8443$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 Table~\ref{tab:main} shows no benefit from additional spatial context. Moving
 from one slice to five changes three-class macro-F1 by $-0.027$ (Model A) and
-$-0.020$ (Model C); with per-seed bootstrap intervals spanning roughly $\pm0.05$
-on a 396-nodule test set, these are not distinguishable from zero. Binary
-ROC-AUC is nearly identical across representations ($0.8644$ vs $0.8612$),
-indicating that ranking quality---not merely the decision threshold---is
-unchanged.
+$-0.020$ (Model C); extending to the full 104-slice volume changes it by
+$-0.041$ and $-0.040$ respectively. With per-seed bootstrap intervals spanning
+roughly $\pm0.05$ on a 396-nodule test set, none of these are distinguishable
+from zero, and all are negative in sign. The strongest model overall is 2D
+(Model C, $0.6134$); the strongest 3D model reaches $0.6083$, an indistinguishable
+figure obtained at $18\times$ the training cost ($42.7$ vs $2.4$ minutes per seed
+on the same hardware). Binary ROC-AUC is nearly identical across representations
+($0.8644$, $0.8612$, $0.8443$), indicating that ranking quality---not merely the
+decision threshold---is unchanged.
 
-\subsection{Self-supervised pretraining does not help}
+\subsection{Self-supervised pretraining helps only the 3D encoder}
 
 MoCo~v2 changed three-class test macro-F1 by $-0.0102$ in 2D and $+0.0090$ in
 2.5D: opposite signs, both inside the seed spread. ROC-AUC was essentially
 unchanged in 2D ($0.7579$ vs $0.7565$). The pretext task itself trained well,
 with InfoNCE loss falling from $7.48$ to $4.14$ and instance-discrimination
-accuracy reaching $0.863$ over 200 epochs, so this is a transfer failure rather
-than an optimisation failure. Instance discrimination rewards features that
-identify a crop---surrounding vasculature, pleural contact, framing---which need
-not be the features that indicate malignancy risk.
+accuracy reaching $0.863$ over 200 epochs, so in these two representations the
+outcome is a transfer failure rather than an optimisation failure. Instance
+discrimination rewards features that identify a crop---surrounding vasculature,
+pleural contact, framing---which need not be the features that indicate
+malignancy risk.
+
+The 3D arm behaves differently. There MoCo gives $+0.043$ macro-F1 over the
+supervised baseline ($0.6083$ vs $0.5653$) and $+0.035$ over the augmented model
+($0.5738$), making the pretrained model the strongest 3D configuration we
+obtained. The pattern across representations is consistent with pretraining
+mattering in proportion to how data-starved supervised training is: the 3D
+encoder carries $14.4$M parameters against $1{,}428$ training volumes, where the
+2D encoder sees the same patients as $11.2$M parameters over far simpler inputs.
+
+We report this as an observation rather than a claim. In the 3D arm, validation
+macro-F1 ranked the three configurations differently from test---Model B had the
+\emph{lowest} validation score ($0.5662$) of the three yet the highest test
+score---so with three seeds we cannot separate a genuine pretraining benefit
+from checkpoint-selection noise. Distinguishing the two requires more seeds than
+we ran.
 
 \subsection{Augmentation improves generalisation without reducing memorisation}
 
@@ -252,10 +275,15 @@ fall at median $3.5$ or $4.0$.
 
 \section{Discussion}
 
-Three architectures spanning one to 104 slices, two of them additionally
-pretrained on 5133 unlabelled volumes, converge to the same three-class
-performance. The most parsimonious explanation is that they are all saturating
-the information available in the labels rather than in the images.
+Three architectures spanning one to 104 slices, each additionally pretrained on
+5133 unlabelled volumes, converge to the same three-class performance: the best
+configuration of every representation lands between $0.6083$ and $0.6134$
+macro-F1. The most parsimonious explanation is that they are all saturating the
+information available in the labels rather than in the images. On that reading,
+pretraining helps the 3D encoder not by supplying information the images lacked
+but by partially compensating for the optimisation disadvantage of fitting
+$14.4$M parameters to $1{,}428$ volumes---it moves the weakest representation up
+to the common ceiling rather than through it.
 
 This has a practical consequence for the literature. Improvements of one or two
 macro-F1 points on LIDC-IDRI, reported without stratification by annotator
@@ -274,16 +302,24 @@ representation is superior. Labels are radiologist opinion rather than
 histopathology, so the ``ceiling'' we measure is agreement with readers, not
 with ground truth. We evaluated a single self-supervised configuration; a
 negative transfer result for one MoCo~v2 setting is not evidence that
-self-supervision cannot help. The $z$ axis was resampled from
-$2.5\,\mathrm{mm}$, so inter-slice context is partly interpolated, which
-disadvantages the 2.5D and 3D arms to an unknown degree. Hyperparameters were
-tuned on a 382-nodule validation split, itself a small sample.
+self-supervision cannot help. Each configuration was run with three seeds;
+this is enough to show that the representations do not separate, but not enough
+to resolve the $+0.043$ pretraining effect in the 3D arm, particularly as 3D
+validation macro-F1 ranked configurations inconsistently with test. The $z$ axis
+was resampled from $2.5\,\mathrm{mm}$, so inter-slice context is partly
+interpolated, which disadvantages the 2.5D and 3D arms to an unknown degree.
+Hyperparameters were tuned on a 382-nodule validation split, itself a small
+sample, and the search was conducted on the 2D arm and transferred unchanged to
+2.5D and 3D. Holding hyperparameters fixed isolates the effect of the
+representation, but it does not give each architecture its best achievable
+configuration, and a per-arm search could narrow or widen the gaps we report.
 
 \section{Conclusion}
 
-Under a controlled single-pipeline comparison, neither additional spatial
-context nor self-supervised pretraining improved pulmonary nodule
-malignancy-risk classification on LIDC-IDRI. Performance is instead bounded by
+Under a controlled single-pipeline comparison, additional spatial context did
+not improve pulmonary nodule malignancy-risk classification on LIDC-IDRI, and
+self-supervised pretraining improved only the representation that was furthest
+behind, without lifting it past the others. Performance is instead bounded by
 annotator disagreement: where radiologists agree, a single CT slice suffices for
 $0.945$ accuracy and $0.987$ AUC. We suggest that progress on this benchmark be
 measured against agreement-stratified baselines.
