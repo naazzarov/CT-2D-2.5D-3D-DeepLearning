@@ -26,6 +26,19 @@
           1,
           2
         ]
+      },
+      "3d": {
+        "test_macro_f1_mean": 0.5652798846096344,
+        "test_macro_f1_std": 0.04073619805913705,
+        "test_accuracy": 0.5563973063973063,
+        "test_balanced_accuracy": 0.5541625183568918,
+        "test_auc": 0.7222808535787443,
+        "params": 14357059,
+        "seeds": [
+          0,
+          1,
+          2
+        ]
       }
     },
     "model_b_noaug": {
@@ -49,6 +62,19 @@
         "test_balanced_accuracy": 0.5798125968628952,
         "test_auc": 0.7368254384286538,
         "params": 11184323,
+        "seeds": [
+          0,
+          1,
+          2
+        ]
+      },
+      "3d": {
+        "test_macro_f1_mean": 0.6082956374213128,
+        "test_macro_f1_std": 0.007832995883446003,
+        "test_accuracy": 0.6052188552188552,
+        "test_balanced_accuracy": 0.5965035406638134,
+        "test_auc": 0.737332750977493,
+        "params": 14357059,
         "seeds": [
           0,
           1,
@@ -82,6 +108,19 @@
           1,
           2
         ]
+      },
+      "3d": {
+        "test_macro_f1_mean": 0.5738364199973818,
+        "test_macro_f1_std": 0.013373675026943694,
+        "test_accuracy": 0.5656565656565656,
+        "test_balanced_accuracy": 0.5675739514187937,
+        "test_auc": 0.719745242936127,
+        "params": 14357059,
+        "seeds": [
+          0,
+          1,
+          2
+        ]
       }
     },
     "binary_mild": {
@@ -105,6 +144,19 @@
         "test_balanced_accuracy": 0.8009414096370618,
         "test_auc": 0.8612040133779265,
         "params": 11183810,
+        "seeds": [
+          0,
+          1,
+          2
+        ]
+      },
+      "3d": {
+        "test_macro_f1_mean": 0.7865622353739781,
+        "test_macro_f1_std": 0.030730655380096776,
+        "test_accuracy": 0.7942583732057416,
+        "test_balanced_accuracy": 0.7825622445187662,
+        "test_auc": 0.84429580081754,
+        "params": 14356546,
         "seeds": [
           0,
           1,
