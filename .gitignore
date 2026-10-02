@@ -244,3 +244,4 @@ data/cache/
 # saved probability arrays), which are reproducible from the code.
 results/**/*.pt
 results/**/*.npy
+.DS_Store
