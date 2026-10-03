@@ -57,5 +57,10 @@ representation sweep is *evidence for* point 3, not the headline.
 ## Building
 
 ```bash
+python scripts/make_paper_figures.py      # -> paper/figures/*.pdf
 cd paper && pdflatex main && bibtex main && pdflatex main && pdflatex main
 ```
+
+Figures are generated from the committed `results/` files, except the
+agreement-stratified binary panel (`fig_ceiling`), whose values are copied from
+`results/2d/ANALYSIS.md` until the underlying predictions are committed.

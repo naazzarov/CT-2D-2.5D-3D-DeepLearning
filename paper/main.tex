@@ -202,7 +202,65 @@ Binary         & macro-F1 & $0.8227 \pm 0.002$ & $0.8047 \pm 0.006$ & $0.7866 \p
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:main} shows no benefit from additional spatial context. Moving
+\begin{figure}[t]\centering
+\includegraphics[width=\linewidth]{figures/fig_main_comparison.pdf}
+\caption{Test performance by representation. Bars are means over three seeds,
+error bars one standard deviation, dots individual seeds; the dotted line is the
+majority-class baseline. (a)~Three-class macro-F1 for Models A--C. (b)~Binary
+macro-F1 and ROC-AUC. No representation separates from the others.}
+\label{fig:main}
+\end{figure}
+
+\begin{table}[t]\centering
+\caption{Per-class test F1 (three-class), mean over three seeds. Malignant is
+the easiest class and benign the hardest in every arm.}
+\label{tab:perclass}
+\begin{tabular}{llccc}
+\toprule
+Model & Class & 2D & 2.5D & 3D \\
+\midrule
+A (supervised) & benign        & $0.5362$ & $0.5328$ & $0.4583$ \\
+               & indeterminate & $0.6001$ & $0.5550$ & $0.5733$ \\
+               & malignant     & $0.6814$ & $0.6477$ & $0.6643$ \\
+\midrule
+B (MoCo)       & benign        & $0.5169$ & $0.4906$ & $0.4860$ \\
+               & indeterminate & $0.6080$ & $0.5801$ & $0.6315$ \\
+               & malignant     & $0.6623$ & $0.6917$ & $0.7074$ \\
+\midrule
+C (augmented)  & benign        & $0.5421$ & $0.5228$ & $0.4436$ \\
+               & indeterminate & $0.6274$ & $0.5853$ & $0.5809$ \\
+               & malignant     & $0.6708$ & $0.6720$ & $0.6970$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]\centering
+\caption{Computational cost. Supervised minutes are per seed for Models A / B /
+C; MoCo pretraining is a single run shared by the three Model B seeds. Times
+were measured on different hardware and are not directly comparable across
+arms.}
+\label{tab:cost}
+\begin{tabular}{lllccl}
+\toprule
+Arm & Encoder & Parameters & Supervised min/seed & MoCo min & Hardware \\
+\midrule
+2D   & ResNet-18    & 11{,}171{,}779 & 2.1 / 2.2 / 2.4    & 57.0  & Apple M2 \\
+2.5D & ResNet-18    & 11{,}184{,}323 & 3.2 / 3.0 / 3.4    & 35.2  & Apple M2 \\
+3D   & 3D ResNet-10 & 14{,}357{,}059 & 24.5 / 31.7 / 42.7 & 327.1 & Kaggle GPU \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]\centering
+\includegraphics[width=0.55\linewidth]{figures/fig_cost.pdf}
+\caption{Test macro-F1 against supervised training time per seed (log scale).
+Error bars are one standard deviation over seeds. 3D costs more than an order
+of magnitude more time without a corresponding gain.}
+\label{fig:cost}
+\end{figure}
+
+Table~\ref{tab:main} and Figure~\ref{fig:main} show no benefit from additional
+spatial context. Moving
 from one slice to five changes three-class macro-F1 by $-0.027$ (Model A) and
 $-0.020$ (Model C); extending to the full 104-slice volume changes it by
 $-0.041$ and $-0.040$ respectively. With per-seed bootstrap intervals spanning
@@ -213,9 +271,12 @@ indistinguishable figure that required a $327$-minute pretraining run plus
 $31.7$ minutes of fine-tuning per seed on a Kaggle GPU, against $2.4$ minutes
 per seed for 2D Model C on an Apple M2. Because the arms ran on different
 hardware these times are not a controlled cost comparison, but they put 3D more
-than an order of magnitude above 2D. Binary ROC-AUC is nearly identical across representations
-($0.8644$, $0.8612$, $0.8443$), indicating that ranking quality---not merely the
-decision threshold---is unchanged.
+than an order of magnitude above 2D (Table~\ref{tab:cost},
+Figure~\ref{fig:cost}). Binary ROC-AUC is nearly identical across
+representations ($0.8644$, $0.8612$, $0.8443$), indicating that ranking
+quality---not merely the decision threshold---is unchanged. Per-class F1
+(Table~\ref{tab:perclass}) follows the same ordering in every arm: malignant is
+easiest and benign hardest, despite benign being the larger training class.
 
 \subsection{Self-supervised pretraining helps only the 3D encoder}
 
@@ -223,8 +284,9 @@ MoCo~v2 changed three-class test macro-F1 by $-0.0102$ in 2D and $+0.0090$ in
 2.5D: opposite signs, both inside the seed spread. ROC-AUC was essentially
 unchanged in 2D ($0.7579$ vs $0.7565$). The pretext task itself trained well,
 with InfoNCE loss falling from $7.48$ to $4.14$ and instance-discrimination
-accuracy reaching $0.863$ over 200 epochs, so in these two representations the
-outcome is a transfer failure rather than an optimisation failure. Instance
+accuracy reaching $0.863$ over 200 epochs (Figure~\ref{fig:moco}), so in these
+two representations the outcome is a transfer failure rather than an
+optimisation failure. Instance
 discrimination rewards features that identify a crop---surrounding vasculature,
 pleural contact, framing---which need not be the features that indicate
 malignancy risk.
@@ -245,13 +307,30 @@ test, so with three seeds we cannot separate a genuine pretraining benefit from
 checkpoint-selection noise. Distinguishing the two requires more seeds than we
 ran.
 
+\begin{figure}[t]\centering
+\includegraphics[width=\linewidth]{figures/fig_moco.pdf}
+\caption{MoCo~v2 pretext training on the 5133-nodule pool. All three encoders
+learn the pretext task; 3D uses a 100-epoch schedule.}
+\label{fig:moco}
+\end{figure}
+
 \subsection{Augmentation does not reduce memorisation}
+
+\begin{figure}[t]\centering
+\includegraphics[width=\linewidth]{figures/fig_curves.pdf}
+\caption{2D training and validation macro-F1 per epoch, without and with mild
+augmentation. Seed 0 is drawn solid, seeds 1--2 faded; dotted verticals mark
+the selected epochs and the dashed line marks $0.90$. Training macro-F1 passes
+$0.90$ within 7--8 epochs either way while validation plateaus near $0.6$.}
+\label{fig:curves}
+\end{figure}
 
 On test, mild augmentation gave the highest 2D score ($0.6134$ vs $0.6059$
 unaugmented) and strong augmentation the lowest ($0.5908$). These differences
 are inside the seed spread, and validation did not reproduce the ordering
 ($0.5982$, $0.5962$ and $0.5823$ for none, mild and strong), so we do not claim
 an optimal strength. The train--validation macro-F1 gap at the selected epoch
+(Figure~\ref{fig:curves})
 was unchanged: $+0.386$ without augmentation, $+0.394$ with mild augmentation.
 Peak 2D training macro-F1 reached $1.000$ with and without mild augmentation
 ($0.999$ with strong augmentation), and training
@@ -278,7 +357,24 @@ Remainder        & 154 & $0.805$ & $0.902$ \\
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:ceiling} is our central result. On nodules where radiologists
+\begin{figure}[t]\centering
+\includegraphics[width=\linewidth]{figures/fig_ceiling.pdf}
+\caption{Binary test accuracy against label confidence (2D, probabilities
+averaged over three seeds). (a)~By median radiologist rating; the red bar is a
+midpoint median ($3.5$), which no radiologist assigned. (b)~By the confidence
+subsets of Table~\ref{tab:ceiling}.}
+\label{fig:ceiling}
+\end{figure}
+
+\begin{figure}[t]\centering
+\includegraphics[width=\linewidth]{figures/fig_confusion.pdf}
+\caption{Three-class test confusion matrices for Model C, pooled over three
+seeds (counts and row percentages). Errors concentrate on the
+benign/indeterminate and indeterminate/malignant boundaries in every arm.}
+\label{fig:confusion}
+\end{figure}
+
+Table~\ref{tab:ceiling} and Figure~\ref{fig:ceiling} are our central result. On nodules where radiologists
 agreed, a single-slice ResNet-18 reaches $0.945$ accuracy and $0.987$ AUC. The
 pooled accuracy of the same seed-averaged predictions, $0.842$ ($176/209$), is
 depressed almost entirely by nodules where they did not.
@@ -289,10 +385,12 @@ $3.5$ is not a rating any radiologist assigned. Nodules flagged as midpoint
 medians score $0.667$ against $0.868$ for the rest; single-reader nodules score
 $0.722$ against $0.903$ for three-reader nodules.
 
-The three-class confusion matrices show the same structure. Pooling over seeds
-for 2D Model C, benign$\leftrightarrow$indeterminate accounts for 284 errors and
+The three-class confusion matrices (Figure~\ref{fig:confusion}) show the same
+structure. Pooling over seeds for 2D Model C,
+benign$\leftrightarrow$indeterminate accounts for 284 errors and
 indeterminate$\leftrightarrow$malignant for 135, while
-benign$\leftrightarrow$malignant accounts for only 41. The clinically meaningful
+benign$\leftrightarrow$malignant accounts for only 41. The 2.5D (322 / 133 / 38)
+and 3D (359 / 117 / 40) arms follow the same pattern. The clinically meaningful
 extremes are separable; the boundary that is not is the one defined by reader
 disagreement.
 
