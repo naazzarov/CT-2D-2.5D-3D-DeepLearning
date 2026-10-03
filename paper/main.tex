@@ -31,8 +31,8 @@ produced no measurable gain in the 2D and 2.5D arms, and an apparent gain only
 in the 3D arm, where validation did not reliably rank configurations. We show
 instead that performance is bounded by \emph{annotator disagreement}. On a binary
 benign-versus-malignant cohort drawn from the same images and patient splits,
-accuracy is $0.945$ and AUC $0.987$ on nodules whose radiologist labels are
-unanimous, but falls to $0.805$ and $0.902$ on the remainder; classification
+accuracy is $0.945$ and AUC $0.987$ on nodules with concordant radiologist
+labels, but falls to $0.805$ and $0.902$ on the remainder; classification
 accuracy tracks the median malignancy rating, collapsing from $\sim\!0.90$ at
 the rating extremes to $0.667$ at a median of $3.5$, a value that is not an
 original radiologist rating but an artefact of averaging disagreeing readers.
@@ -75,9 +75,9 @@ Our contributions:
   as an observation requiring more seeds rather than a result.
 \item We locate the performance ceiling in annotator disagreement rather than
   model capacity, and quantify it: binary accuracy is $0.945$ / AUC $0.987$ on
-  unanimously labelled nodules versus $0.805$ / $0.902$ on ambiguous ones.
-\item We show that augmentation improves generalisation without reducing
-  memorisation, and report the seed-variance reduction it does deliver.
+  concordantly labelled nodules versus $0.805$ / $0.902$ on the remainder.
+\item We show that augmentation does not reduce memorisation, and report the
+  seed-variance reduction it does deliver.
 \end{enumerate}
 
 \section{Data}
@@ -101,8 +101,10 @@ Section~\ref{sec:ceiling}.
 indeterminate, 555 malignant), split at patient level into 1876 / 382 / 396
 nodules over 602 / 134 / 134 patients. A binary cohort excluding
 \emph{indeterminate} gives 1000 / 219 / 209 nodules; it is a strict subset of
-the same splits, so no patient moves between partitions. An additional 5133
-unlabelled nodules from training patients only form the self-supervised pool.
+the same splits, so no patient moves between partitions. The self-supervised
+pool is 5133 nodules from 692 training-split patients, used without labels; it
+may include labelled training nodules but contains no validation or test
+patient.
 
 \paragraph{Leakage control.} We verified programmatically, and re-assert on
 every training run, that no patient and no nodule appears in more than one
@@ -119,33 +121,50 @@ since an unstated difference here would masquerade as a representation effect.
 
 \paragraph{Representations.}
 \begin{itemize}
-\item \textbf{2D}: the central slice, $(1, 72, 80)$, ResNet-18.
+\item \textbf{2D}: the central slice, $(1, 72, 80)$,
+  ResNet-18~\citep{he2016resnet}.
 \item \textbf{2.5D}: five neighbouring slices as channels, $(5, 72, 80)$,
   the same ResNet-18 with \texttt{in\_channels}$=5$.
-\item \textbf{3D}: the full crop, $(1, 104, 72, 80)$, a 3D ResNet-10.
+\item \textbf{3D}: the full crop, $(1, 104, 72, 80)$, a 3D
+  ResNet-10~\citep{hara2018spatiotemporal}.
 \end{itemize}
 The 2D and 2.5D models differ by 12{,}544 parameters, entirely in the first
 convolution. We use ResNet-10 rather than ResNet-18 in 3D because a 3D
 ResNet-18 would carry roughly 33M parameters against 1876 training volumes.
 
-\paragraph{Training (shared).} AdamW, learning rate $10^{-3}$, weight decay
-$0.05$, cosine schedule, batch 64 (16 in 3D), dropout $0.5$, label smoothing
-$0.10$, inverse-frequency class weights, early stopping with patience 20 on
-validation macro-F1, maximum 80 epochs. Hyperparameters were selected on
-validation only, by a sweep of eight configurations in the 2D arm, and then
-frozen for every other arm. The test split was evaluated once, after freezing.
+\paragraph{Training (shared).} AdamW~\citep{loshchilov2019adamw}, learning rate
+$10^{-3}$, weight decay $0.05$, cosine schedule, batch 64 (16 in 3D), dropout
+$0.5$, label smoothing $0.10$, inverse-frequency class weights, early stopping
+with patience 20 on validation macro-F1, maximum 80 epochs. Learning rate,
+weight decay, dropout and label smoothing were selected on validation only, by
+a single-seed sweep of eight configurations in the 2D arm, and then frozen for
+every other arm. Augmentation strength is not tuned; it is an experimental
+factor (Models A--C below). The test split was never used for tuning or
+checkpoint selection.
 
-\paragraph{Augmentation.} Training only. Horizontal and vertical flips
-($p=0.5$ each), a combined affine transform ($p=0.8$; rotation $\pm15^\circ$,
-translation $\pm6\%$, scale $0.9$--$1.1$), intensity jitter ($p=0.5$;
-multiplicative $0.9$--$1.1$ then additive $\pm0.05$) and Gaussian noise
-($p=0.3$, $\sigma=0.02$). In 3D we apply no flip or rotation along $z$, because
-CT has a consistent anatomical orientation in $z$ and our $z$-context is
-interpolated from $2.5\,\mathrm{mm}$ acquisitions.
+\paragraph{Models.} \textbf{A}: supervised from random initialisation, no
+augmentation. \textbf{B}: MoCo~v2 pretraining, then supervised fine-tuning
+without augmentation. \textbf{C}: as A, with the mild augmentation below. The
+binary runs use the Model C recipe.
 
-\paragraph{Self-supervision.} MoCo~v2~\citep{chen2020mocov2} on the 5133-nodule
-pool, no labels: queue $K=4096$, temperature $0.2$, momentum $0.999$, two-layer
-MLP head, SGD. With a single device we approximate shuffle-BN by permuting the
+\paragraph{Augmentation.} Training only, Model C and binary runs. Horizontal
+and vertical flips ($p=0.5$ each), a combined affine transform ($p=0.8$;
+rotation $\pm15^\circ$, translation $\pm6\%$, scale $0.9$--$1.1$), intensity
+jitter ($p=0.5$; multiplicative $0.9$--$1.1$ then additive $\pm0.05$) and
+Gaussian noise ($p=0.3$, $\sigma=0.02$). A \emph{strong} variant, reported
+only as an ablation, doubles the geometric ranges, triples the intensity
+ranges, uses $\sigma=0.05$ and adds random erasing ($p=0.25$). In 3D, flips are
+in-plane only, so the volume is never flipped along $z$. In the reported 3D runs
+the $\pm15^\circ$ rotation was applied in the sagittal ($y$--$z$) plane rather
+than the axial plane, so 3D augmentation is not an exact analogue of the 2D
+recipe (see Limitations).
+
+\paragraph{Self-supervision.} MoCo~v2~\citep{he2020moco,chen2020mocov2} on the
+5133-nodule pool, no labels: queue $K=4096$, temperature $0.2$, momentum
+$0.999$, two-layer MLP head, SGD. In 2D and 2.5D we pretrain for 200 epochs
+at batch 128 and learning rate $0.015$; in 3D we pretrain for 100 epochs at
+batch 32 and learning rate $0.004$, with views drawn from the strong 3D
+augmentation. With a single device we approximate shuffle-BN by permuting the
 key batch and forwarding it in chunks, so each chunk receives its own batch
 statistics.
 
@@ -171,7 +190,7 @@ A (supervised) & macro-F1 & $0.6059 \pm 0.024$ & $0.5785 \pm 0.022$ & $0.5653 \p
                & accuracy & $0.6002$ & $0.5690$ & $0.5564$ \\
                & ROC-AUC  & $0.7565$ & $0.7405$ & $0.7223$ \\
 \midrule
-B (MoCo)       & macro-F1 & $0.5957 \pm 0.009$ & $0.5875 \pm 0.011$ & $\mathbf{0.6083} \pm 0.008$ \\
+B (MoCo)       & macro-F1 & $0.5957 \pm 0.009$ & $0.5875 \pm 0.011$ & $0.6083 \pm 0.008$ \\
                & ROC-AUC  & $0.7579$ & $0.7368$ & $0.7373$ \\
 \midrule
 C (augmented)  & macro-F1 & $0.6134 \pm 0.008$ & $0.5934 \pm 0.016$ & $0.5738 \pm 0.013$ \\
@@ -189,9 +208,12 @@ $-0.020$ (Model C); extending to the full 104-slice volume changes it by
 $-0.041$ and $-0.040$ respectively. With per-seed bootstrap intervals spanning
 roughly $\pm0.05$ on a 396-nodule test set, none of these are distinguishable
 from zero, and all are negative in sign. The strongest model overall is 2D
-(Model C, $0.6134$); the strongest 3D model reaches $0.6083$, an indistinguishable
-figure obtained at $18\times$ the training cost ($42.7$ vs $2.4$ minutes per seed
-on the same hardware). Binary ROC-AUC is nearly identical across representations
+(Model C, $0.6134$); the strongest 3D model (Model B) reaches $0.6083$, an
+indistinguishable figure that required a $327$-minute pretraining run plus
+$31.7$ minutes of fine-tuning per seed on a Kaggle GPU, against $2.4$ minutes
+per seed for 2D Model C on an Apple M2. Because the arms ran on different
+hardware these times are not a controlled cost comparison, but they put 3D more
+than an order of magnitude above 2D. Binary ROC-AUC is nearly identical across representations
 ($0.8644$, $0.8612$, $0.8443$), indicating that ranking quality---not merely the
 decision threshold---is unchanged.
 
@@ -216,23 +238,27 @@ encoder carries $14.4$M parameters against $1876$ training volumes, where the
 2D encoder sees the same patients as $11.2$M parameters over far simpler inputs.
 
 We report this as an observation rather than a claim. In the 3D arm, validation
-macro-F1 ranked the three configurations differently from test---Model B had the
-\emph{lowest} validation score ($0.5662$) of the three yet the highest test
-score---so with three seeds we cannot separate a genuine pretraining benefit
-from checkpoint-selection noise. Distinguishing the two requires more seeds than
-we ran.
+macro-F1 ranked the three configurations differently from test: validation
+ordered them A ($0.5698$), B ($0.5662$), C ($0.5375$), whereas test ordered them
+B, C, A. Model B scored below Model A on validation yet $0.043$ above it on
+test, so with three seeds we cannot separate a genuine pretraining benefit from
+checkpoint-selection noise. Distinguishing the two requires more seeds than we
+ran.
 
-\subsection{Augmentation improves generalisation without reducing memorisation}
+\subsection{Augmentation does not reduce memorisation}
 
-Mild augmentation gave the best 2D result ($0.6134$ vs $0.6059$ unaugmented),
-and strong augmentation was \emph{worse} than none ($0.5908$), indicating an
-optimum at moderate strength. However, the train--validation macro-F1 gap at the
-selected epoch was unchanged: $+0.386$ without augmentation, $+0.394$ with.
-Peak training macro-F1 reached $1.000$ in every arm, and training macro-F1
-crossed $0.90$ at epoch 7 regardless of augmentation. What augmentation
-reliably delivered was \emph{stability}: the seed standard deviation of test
-macro-F1 fell from $\pm0.024$ to $\pm0.007$. Early stopping, not augmentation,
-is what limits overfitting here.
+On test, mild augmentation gave the highest 2D score ($0.6134$ vs $0.6059$
+unaugmented) and strong augmentation the lowest ($0.5908$). These differences
+are inside the seed spread, and validation did not reproduce the ordering
+($0.5982$, $0.5962$ and $0.5823$ for none, mild and strong), so we do not claim
+an optimal strength. The train--validation macro-F1 gap at the selected epoch
+was unchanged: $+0.386$ without augmentation, $+0.394$ with mild augmentation.
+Peak 2D training macro-F1 reached $1.000$ with and without mild augmentation
+($0.999$ with strong augmentation), and training
+macro-F1 crossed $0.90$ at epoch 7--8 regardless of augmentation. What
+augmentation reliably delivered was \emph{stability}: the seed standard
+deviation of test macro-F1 fell from $\pm0.024$ to $\pm0.008$. Early stopping,
+not augmentation, is what limits overfitting here.
 
 \subsection{The ceiling is annotator disagreement}
 \label{sec:ceiling}
@@ -254,8 +280,8 @@ Remainder        & 154 & $0.805$ & $0.902$ \\
 
 Table~\ref{tab:ceiling} is our central result. On nodules where radiologists
 agreed, a single-slice ResNet-18 reaches $0.945$ accuracy and $0.987$ AUC. The
-aggregate figure of $0.83$ is depressed almost entirely by nodules where they
-did not.
+pooled accuracy of the same seed-averaged predictions, $0.842$ ($176/209$), is
+depressed almost entirely by nodules where they did not.
 
 Accuracy tracks the median rating directly: $0.898$ at median $1.0$, $0.905$ at
 $2.0$, $0.900$ at $5.0$---but $0.667$ at $3.5$ and $0.697$ at $4.0$. Recall that
@@ -270,15 +296,15 @@ benign$\leftrightarrow$malignant accounts for only 41. The clinically meaningful
 extremes are separable; the boundary that is not is the one defined by reader
 disagreement.
 
-Finally, the models are calibrated about their own ignorance: mean confidence is
-$0.762$ on correct predictions and $0.462$ on errors, and 19 of 33 binary errors
-fall at median $3.5$ or $4.0$.
+Finally, the models are markedly less confident when they are wrong: mean
+confidence is $0.762$ on correct predictions and $0.462$ on errors, and 19 of
+33 binary errors fall at median $3.5$ or $4.0$.
 
 \section{Discussion}
 
 Three architectures spanning one to 104 slices, each additionally pretrained on
 5133 unlabelled volumes, converge to the same three-class performance: the best
-configuration of every representation lands between $0.6083$ and $0.6134$
+configuration of every representation lands between $0.5934$ and $0.6134$
 macro-F1. The most parsimonious explanation is that they are all saturating the
 information available in the labels rather than in the images. On that reading,
 pretraining helps the 3D encoder not by supplying information the images lacked
@@ -301,9 +327,14 @@ capacity, and all models overfit substantially. Confidence intervals are
 correspondingly wide, and we have deliberately refrained from claiming that any
 representation is superior. Labels are radiologist opinion rather than
 histopathology, so the ``ceiling'' we measure is agreement with readers, not
-with ground truth. We evaluated a single self-supervised configuration; a
+with ground truth. We evaluated a single self-supervised configuration per
+representation, and the 3D one used a shorter schedule than 2D and 2.5D; a
 negative transfer result for one MoCo~v2 setting is not evidence that
-self-supervision cannot help. Each configuration was run with three seeds;
+self-supervision cannot help. In the reported 3D runs that use augmentation
+(Model C, binary, and the MoCo views behind Model B), rotation was applied in
+the sagittal rather than the axial plane, so 3D augmentation is not an exact
+analogue of the 2D recipe; Model A is unaffected. Training times were measured
+on different hardware across arms. Each configuration was run with three seeds;
 this is enough to show that the representations do not separate, but not enough
 to resolve the $+0.043$ pretraining effect in the 3D arm, particularly as 3D
 validation macro-F1 ranked configurations inconsistently with test. The $z$ axis
