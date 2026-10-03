@@ -20,7 +20,11 @@ REPS = [("2d", "2D (1 slice)"), ("2p5d", "2.5D (5 slices)"),
 MODELS = [("model_a_noaug", "Model A — supervised, no augmentation", "3class"),
           ("model_b_noaug", "Model B — MoCo v2 → fine-tune", "3class"),
           ("model_c_mild", "Model C — supervised, mild augmentation", "3class"),
-          ("binary_mild", "Binary — supervised, mild augmentation", "binary")]
+          ("binary_mild", "Binary — supervised, mild augmentation", "binary"),
+          ("model_c_mild_confident",
+           "Model C, confident-label cohort only", "3class"),
+          ("binary_mild_confident",
+           "Binary, confident-label cohort only", "binary")]
 
 
 def collect(rep: str, tag: str):

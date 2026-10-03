@@ -240,8 +240,11 @@ env/
 data/cache/
 
 # Results: keep the reports, metrics and figures in the repo so the team can
-# read each other's numbers; exclude only the large artefacts (checkpoints and
-# saved probability arrays), which are reproducible from the code.
+# read each other's numbers; exclude only the large artefacts (checkpoints),
+# which are reproducible from the code. Test predictions are a few KB per run
+# and are kept: the agreement-stratified analysis is computed from them.
 results/**/*.pt
 results/**/*.npy
+!results/**/test_probabilities.npy
+!results/**/test_targets.npy
 .DS_Store

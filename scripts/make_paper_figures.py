@@ -2,10 +2,10 @@
 
   python scripts/make_paper_figures.py      # -> paper/figures/*.pdf
 
-Everything is read from results/<rep>/<tag>/seed*/result.json and
-results/<rep>/moco/moco_history.json, except the agreement-stratified binary
-numbers (fig_ceiling): the seed-averaged test probabilities behind them are not
-committed, so those values are copied from results/2d/ANALYSIS.md.
+Everything is read from results/<rep>/<tag>/seed*/result.json,
+results/<rep>/moco/moco_history.json and results/agreement/*.json. Until
+scripts/stratify_by_agreement.py has been run, fig_ceiling falls back to the
+2D values recorded in results/2d/ANALYSIS.md.
 """
 from __future__ import annotations
 
@@ -59,7 +59,8 @@ def auc_key(r: dict) -> str:
 
 def save(fig, name: str) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT / f"{name}.pdf", bbox_inches="tight")
+    fig.savefig(OUT / f"{name}.pdf", bbox_inches="tight",
+                metadata={"CreationDate": None})
     plt.close(fig)
     print(f"wrote {OUT / name}.pdf")
 
@@ -154,8 +155,17 @@ def fig_confusion() -> None:
     save(fig, "fig_confusion")
 
 
+def agreement(rep: str, tag: str) -> dict | None:
+    f = RESULTS / "agreement" / f"{rep}__{tag}.json"
+    return json.loads(f.read_text()) if f.exists() else None
+
+
 def fig_ceiling() -> None:
-    # From results/2d/ANALYSIS.md: 2D binary, probabilities averaged over seeds.
+    if agreement("2d", "binary_mild") is not None:
+        fig_ceiling_from_analysis()
+        return
+    # Fallback until predictions are committed: values from results/2d/ANALYSIS.md
+    # (2D binary, probabilities averaged over seeds).
     medians = ["1.0", "2.0", "3.5", "4.0", "4.5", "5.0"]
     acc = [0.898, 0.905, 0.667, 0.697, 0.917, 0.900]
     n = [49, 63, 27, 33, 12, 20]
@@ -168,7 +178,7 @@ def fig_ceiling() -> None:
     for b, k in zip(bars, n):
         axes[0].text(b.get_x() + b.get_width() / 2, b.get_height() + 0.01,
                      f"n={k}", ha="center", va="bottom", fontsize=7)
-    axes[0].set_ylim(0.5, 1.0)
+    axes[0].set_ylim(0.0, 1.0)
     axes[0].set_xlabel("median radiologist malignancy rating")
     axes[0].set_ylabel("binary test accuracy")
     axes[0].set_title("(a) Accuracy by median rating")
@@ -183,12 +193,81 @@ def fig_ceiling() -> None:
         axes[1].text(xi - 0.18, a + 0.01, f"{a:.3f}", ha="center", fontsize=7)
         axes[1].text(xi + 0.18, u + 0.01, f"{u:.3f}", ha="center", fontsize=7)
     axes[1].set_xticks(x, subsets)
-    axes[1].set_ylim(0.5, 1.15)
+    axes[1].set_ylim(0.0, 1.15)
     axes[1].set_title("(b) By label confidence")
     axes[1].legend(frameon=False, loc="upper right", ncol=2)
     axes[1].grid(axis="y", alpha=0.3)
     fig.tight_layout()
     save(fig, "fig_ceiling")
+
+
+def fig_ceiling_from_analysis() -> None:
+    """Binary accuracy by median rating (2D) and confident vs remainder accuracy
+    for every representation, from scripts/stratify_by_agreement.py output."""
+    a2 = agreement("2d", "binary_mild")
+    fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.5),
+                             gridspec_kw={"width_ratios": [3, 2]})
+    meds = sorted(a2["by_median"], key=float)
+    acc = [a2["by_median"][m]["accuracy"] for m in meds]
+    n = [a2["by_median"][m]["n"] for m in meds]
+    colors = ["#C44E52" if float(m) % 1 else "#4C72B0" for m in meds]
+    bars = axes[0].bar(meds, acc, color=colors, edgecolor="black", lw=0.5)
+    for b, k in zip(bars, n):
+        axes[0].text(b.get_x() + b.get_width() / 2, b.get_height() + 0.01,
+                     f"n={k}", ha="center", va="bottom", fontsize=7)
+    axes[0].set_ylim(0.0, 1.08)
+    axes[0].set_xlabel("median radiologist malignancy rating")
+    axes[0].set_ylabel("binary test accuracy")
+    axes[0].set_title("(a) 2D accuracy by median rating")
+    axes[0].grid(axis="y", alpha=0.3)
+
+    reps = [(r, l) for r, l in REPS if agreement(r, "binary_mild")]
+    x = np.arange(len(reps))
+    for off, stratum, color in ((-0.18, "confident", "#4C72B0"),
+                                (0.18, "remainder", "#DD8452")):
+        vals, lo, hi = [], [], []
+        for r, _ in reps:
+            s = agreement(r, "binary_mild")["strata"][stratum]
+            v = s["ensemble"]["accuracy"]
+            ci = s["ensemble_accuracy_ci95"]
+            vals.append(v); lo.append(v - ci[0]); hi.append(ci[1] - v)
+        axes[1].bar(x + off, vals, 0.34, yerr=[lo, hi], capsize=2.5,
+                    color=color, edgecolor="black", lw=0.5,
+                    error_kw={"linewidth": 0.8}, label=stratum)
+    axes[1].set_xticks(x, [l for _, l in reps])
+    axes[1].set_ylim(0.0, 1.15)
+    axes[1].set_ylabel("binary test accuracy")
+    axes[1].set_title("(b) Confident vs remainder, 95% CI")
+    axes[1].legend(frameon=False, loc="upper right", ncol=2)
+    axes[1].grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    save(fig, "fig_ceiling")
+
+
+def fig_confident_cohort() -> None:
+    """Full cohort vs confident-only cohort, test macro-F1 per representation."""
+    pairs = [("model_c_mild", "model_c_mild_confident", "three-class"),
+             ("binary_mild", "binary_mild_confident", "binary")]
+    pairs = [p for p in pairs if any(runs(r, p[1]) for r, _ in REPS)]
+    if not pairs:
+        return
+    fig, axes = plt.subplots(1, len(pairs), figsize=(3.5 * len(pairs), 2.6),
+                             squeeze=False)
+    reps = [r for r, _ in REPS]
+    for ax, (full, conf, title) in zip(axes[0], pairs):
+        vals = {"full": {r: test_values(r, full, "macro_f1") for r in reps},
+                "confident": {r: test_values(r, conf, "macro_f1") for r in reps}}
+        vals = {k: {r: v if len(v) else np.array([np.nan]) for r, v in d.items()}
+                for k, d in vals.items()}
+        grouped_bars(ax, reps, ["full", "confident"], vals,
+                     {"full": "#BBBBBB", "confident": "#4C72B0"},
+                     {"full": "all nodules", "confident": "confident labels only"},
+                     ylim=(0.0, 1.0), ylabel="test macro-F1")
+        ax.set_xticklabels([l for _, l in REPS])
+        ax.set_title(title)
+    axes[0][0].legend(frameon=False, loc="lower left", fontsize=7)
+    fig.tight_layout()
+    save(fig, "fig_confident_cohort")
 
 
 def fig_curves() -> None:
@@ -269,3 +348,4 @@ if __name__ == "__main__":
     fig_curves()
     fig_moco()
     fig_cost()
+    fig_confident_cohort()

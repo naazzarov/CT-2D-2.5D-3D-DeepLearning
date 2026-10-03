@@ -19,8 +19,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from src.common import config as C
-from src.common.data import (assert_no_leakage, class_weights, load_splits,
-                             load_ssl_pool, verify_binary_counts)
+from src.common.data import (COHORTS, apply_cohort, assert_no_leakage,
+                             class_weights, load_splits, load_ssl_pool,
+                             verify_binary_counts)
 from src.common.data3d import VolumeDataset, volume_train_statistics
 from src.common.metrics import bootstrap_ci, compute_all, format_report
 from src.common.plots import confusion_figure, training_curves
@@ -56,6 +57,7 @@ def main() -> None:
     ap.add_argument("--dropout", type=float, default=0.5)
     ap.add_argument("--label-smoothing", type=float, default=0.10)
     ap.add_argument("--aug", choices=["none", "mild", "strong"], default="mild")
+    ap.add_argument("--cohort", choices=COHORTS, default="all")
     ap.add_argument("--patience", type=int, default=20)
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--tag", type=str, default="")
@@ -67,6 +69,8 @@ def main() -> None:
     tag = args.tag or ("binary_mild" if args.task == "binary"
                        else ("model_a_noaug" if args.init == "random"
                              else "model_b_noaug"))
+    if args.cohort != "all" and not args.tag:
+        tag += f"_{args.cohort}"
     out = C.RESULTS_DIR / "3d" / tag / f"seed{args.seed}"
     out.mkdir(parents=True, exist_ok=True)
 
@@ -75,6 +79,7 @@ def main() -> None:
     ref = load_splits("3class") if args.task == "binary" else None
     if args.task == "binary":
         verify_binary_counts(splits)
+    splits = apply_cohort(splits, args.cohort, args.task)
     assert_no_leakage(splits, load_ssl_pool(), reference=ref)
     print(f"task {args.task} | rep 3d | train {len(splits['train'])} "
           f"val {len(splits['val'])} test {len(splits['test'])} | device {dev}")

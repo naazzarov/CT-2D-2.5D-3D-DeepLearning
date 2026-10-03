@@ -91,4 +91,4 @@ PATH_COL = "sample_path"
 
 # --------------------------------------------------------------- model select
 PRIMARY_METRIC = "macro_f1"   # validation macro-F1 selects the checkpoint
-SEEDS = (0, 1, 2)             # every result is reported as mean +/- std
+SEEDS = (0, 1, 2, 3, 4)       # every result is reported as mean +/- std

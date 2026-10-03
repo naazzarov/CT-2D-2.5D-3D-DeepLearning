@@ -25,8 +25,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.common import config as C
-from src.common.data import (CentralSliceDataset, assert_no_leakage, class_weights,
-                             load_splits, load_ssl_pool, train_statistics,
+from src.common.data import (COHORTS, CentralSliceDataset, apply_cohort,
+                             assert_no_leakage, class_weights, load_splits,
+                             load_ssl_pool, train_statistics,
                              verify_binary_counts)
 from src.common.metrics import bootstrap_ci, compute_all, format_report
 from src.common.plots import confusion_figure, training_curves
@@ -74,6 +75,9 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--label-smoothing", type=float, default=0.05)
     ap.add_argument("--aug", choices=["none", "mild", "strong"], default="mild")
+    ap.add_argument("--cohort", choices=COHORTS, default="all",
+                    help="'confident' trains and evaluates only on nodules with "
+                         "concordant radiologist labels (src/common/agreement.py)")
     ap.add_argument("--eval-test", action="store_true",
                     help="Evaluate the TEST split. Off during hyperparameter "
                          "search so the test set stays untouched until the "
@@ -85,6 +89,8 @@ def main() -> None:
     default_tag = ("model_a" if args.init == "random" else "model_b")
     if args.task == "binary":
         default_tag = "binary_supervised"
+    if args.cohort != "all":
+        default_tag += f"_{args.cohort}"
     tag = args.tag or default_tag
     out = C.RESULTS_DIR / args.rep / tag / f"seed{args.seed}"
     out.mkdir(parents=True, exist_ok=True)
@@ -96,6 +102,7 @@ def main() -> None:
     reference = load_splits("3class") if args.task == "binary" else None
     if args.task == "binary":
         verify_binary_counts(splits)
+    splits = apply_cohort(splits, args.cohort, args.task)
     assert_no_leakage(splits, load_ssl_pool(), reference=reference)
     print(f"task {args.task} ({num_classes} classes: {', '.join(class_names)})")
     print(f"leakage check passed | train {len(splits['train'])} "

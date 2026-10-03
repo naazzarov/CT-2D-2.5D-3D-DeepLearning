@@ -93,6 +93,37 @@ def assert_no_leakage(splits: dict[str, pd.DataFrame], ssl: pd.DataFrame | None 
     return True
 
 
+COHORTS = ("all", "confident")
+
+
+def apply_cohort(splits: dict[str, pd.DataFrame], cohort: str,
+                 task: str = "3class") -> dict[str, pd.DataFrame]:
+    """Restrict every split to a label-agreement cohort (see common.agreement).
+
+    Filtering only removes rows, so patient-level separation is preserved; the
+    leakage check should still be run on the result.
+    """
+    if cohort == "all":
+        return splits
+    if cohort != "confident":
+        raise ValueError(f"unknown cohort {cohort!r}; expected one of {COHORTS}")
+    from src.common.agreement import confident_mask
+    spec = C.TASKS[task]
+    out = {}
+    for name, df in splits.items():
+        sub = df[confident_mask(df)].reset_index(drop=True)
+        counts = sub[spec["label_col"]].value_counts().reindex(
+            range(spec["num_classes"]), fill_value=0)
+        if (counts == 0).any():
+            raise AssertionError(
+                f"confident {name} split has no examples of class(es) "
+                f"{[spec['class_names'][i] for i in counts.index[counts == 0]]}")
+        print(f"cohort confident | {name}: {len(sub)}/{len(df)} nodules, "
+              f"per class {counts.tolist()}")
+        out[name] = sub
+    return out
+
+
 def class_weights(train: pd.DataFrame, task: str = "3class") -> torch.Tensor:
     """Inverse-frequency weights, N / (K * n_k), so the model cannot coast by
     predicting the majority class (indeterminate is 47% of the 3-class train
