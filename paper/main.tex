@@ -46,8 +46,9 @@ reported stratified by annotator agreement.
 \section{Introduction}
 
 Computed tomography is volumetric, and a long line of work argues that deep
-models should exploit that structure: 2.5D models stack neighbouring slices,
-and 3D models consume whole volumes. Reported gains are usually modest and are
+models should exploit that structure~\citep{setio2016multiview,
+hussein2017risk,zhu2018deeplung,yang2021acs}: 2.5D models stack neighbouring
+slices, and 3D models consume whole volumes. Reported gains are usually modest and are
 almost always confounded, because the compared systems differ not only in
 spatial context but in preprocessing, intensity windowing, augmentation,
 capacity, training schedule and evaluation protocol.
@@ -79,6 +80,41 @@ Our contributions:
 \item We show that augmentation does not reduce memorisation, and report the
   seed-variance reduction it does deliver.
 \end{enumerate}
+
+\section{Related Work}
+
+\paragraph{2D, 2.5D and 3D nodule classification.} Early deep models for
+LIDC-IDRI malignancy classified 2D patches at several scales or
+crops~\citep{shen2015multiscale,shen2017multicrop}. Multi-view 2D networks,
+which aggregate several planes through a nodule, were introduced for false
+positive reduction~\citep{setio2016multiview}, and fully 3D networks followed
+for malignancy~\citep{hussein2017risk,zhu2018deeplung}. ACS
+convolutions~\citep{yang2021acs} reuse 2D-pretrained kernels on 3D input and
+report gains over both pure 2D and 3D baselines on LIDC-IDRI. These studies
+generally compare systems that differ in more than input dimensionality, and
+many drop nodules with an indeterminate rating, which changes both the task and
+its difficulty. Our contribution is not a new architecture but a comparison in
+which only the representation varies.
+
+\paragraph{Label selection and ambiguity on LIDC-IDRI.} \citet{baltatzis2021pitfalls}
+showed that the choice of which LIDC-IDRI nodules to include, and how reader
+ratings are aggregated, can move reported performance by more than the
+differences between methods. Our ceiling analysis is complementary: rather than
+varying the selection rule, we hold one rule fixed for training and stratify
+the \emph{evaluation} by reader agreement, and we do this across three input
+representations. Multiple LIDC-IDRI annotators have also been used to model
+ambiguity directly, for example in segmentation~\citep{kohl2018probunet}, and
+reader disagreement has been treated as a prediction target in its own
+right~\citep{raghu2019direct}. More broadly, label noise is a recognised problem
+in medical imaging~\citep{karimi2020noisy}.
+
+\paragraph{Self-supervised pretraining.} Contrastive pretraining such as
+MoCo~\citep{he2020moco} has been shown to help medical image classification when
+the pretraining pool is large~\citep{azizi2021big}, and Models
+Genesis~\citep{zhou2019genesis} provides 3D self-supervised encoders for CT. Our
+pool of 5133 nodules is small by these standards, and our results should be
+read as a test of in-domain, small-pool pretraining rather than of
+self-supervision in general.
 
 \section{Data}
 

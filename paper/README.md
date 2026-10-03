@@ -1,7 +1,7 @@
 # Paper draft
 
-`main.tex` — arXiv-ready draft. Target: **cs.LG** primary, cross-listed
-**eess.IV** and **cs.CV**.
+`main.tex` — arXiv-ready draft. Target: **cs.CV** (or **eess.IV**) primary,
+cross-listed **cs.LG**.
 
 ## Status
 
@@ -13,8 +13,9 @@ runs in `results/` and can be regenerated with:
 ```
 
 Table 2 (agreement-stratified binary results) and the median-rating breakdown
-come from the analysis in `results/2d/ANALYSIS.md`; the script and the
-seed-averaged test probabilities behind them are not yet committed.
+currently come from `results/2d/ANALYSIS.md`. They become reproducible once the
+runbook below has been run: `scripts/stratify_by_agreement.py` recomputes them
+from the committed per-seed test probabilities into `results/AGREEMENT.md`.
 
 ## The argument
 
@@ -44,23 +45,62 @@ representation sweep is *evidence for* point 3, not the headline.
 - [ ] Re-run 3D MoCo, Model B, Model C and binary with the corrected axial
       rotation in `src/common/data3d.py`, then update Table 1 and remove the
       sagittal-rotation caveat from the Augmentation paragraph and Limitations
-- [ ] Add a related-work paragraph with citations for the 2D / 2.5D / 3D
-      LIDC-IDRI literature the introduction refers to
+- [x] Add a related-work section (Section 2)
+- [ ] After the runbook: update Table 1 and the abstract to five seeds, replace
+      Table 2 with `results/AGREEMENT.md`, and add the confident-cohort result
+      (`paper/figures/fig_confident_cohort.pdf`) as a new subsection
 - [ ] Confirm co-authorship with Fatima and Zaineb — they must agree to be
       listed, not merely be listed
 - [ ] Check author name spellings and affiliation
 - [ ] Re-read the LIDC-IDRI / TCIA data use agreement and confirm the citations
       are the ones they ask for
 - [ ] Decide whether to make the GitHub repo public at submission time
-- [ ] Confirm arXiv endorsement covers cs.LG
+- [ ] Confirm the 2.5D runs were on the Apple M2 (cost table)
+- [ ] Confirm arXiv endorsement covers the chosen primary category
+
+## Runbook for the final version
+
+These runs need the dataset and a GPU, so they cannot run in CI.
+
+1. **Mac, 2D and 2.5D** (from the repo root, with `CT_DATA_ROOT` set):
+
+   ```bash
+   bash scripts/run_final_local.sh
+   ```
+
+   This exports test predictions from the existing checkpoints, adds seeds 3
+   and 4 for every model, trains the confident-label cohort (seeds 0–4), then
+   regenerates `results/AGREEMENT.md`, `results/COMPARISON.md` and the
+   figures. Finished runs are skipped, so it is safe to restart.
+
+2. **Kaggle, 3D** — open `notebooks/3d_kaggle_final.ipynb` and run it three
+   times with `PART = 1`, `2` and `3` (each fits in the 12 h limit). Part 1
+   re-pretrains MoCo with the corrected axial rotation and trains Model B;
+   part 2 trains A, C and binary; part 3 trains the confident cohort. Results
+   are pushed after every seed.
+
+3. **Mac, after pulling the Kaggle results:**
+
+   ```bash
+   git pull
+   .venv/bin/python scripts/stratify_by_agreement.py
+   .venv/bin/python scripts/compare_reps.py
+   .venv/bin/python scripts/make_paper_figures.py
+   ```
+
+   Then update the paper numbers (checklist above) and rebuild.
 
 ## Building
 
 ```bash
 python scripts/make_paper_figures.py      # -> paper/figures/*.pdf
-cd paper && pdflatex main && bibtex main && pdflatex main && pdflatex main
+bash scripts/make_arxiv_bundle.sh         # -> paper/main.pdf and paper/arxiv_submission.tar.gz
 ```
 
-Figures are generated from the committed `results/` files, except the
-agreement-stratified binary panel (`fig_ceiling`), whose values are copied from
-`results/2d/ANALYSIS.md` until the underlying predictions are committed.
+Upload `arxiv_submission.tar.gz` to arXiv as the source; it includes
+`main.bbl`, which arXiv needs because it does not run bibtex.
+
+Figures are generated from the committed `results/` files. The
+agreement-stratified panel (`fig_ceiling`) reads `results/agreement/` when it
+exists and otherwise falls back to the values in `results/2d/ANALYSIS.md`;
+`fig_confident_cohort` is produced only once confident-cohort results exist.
