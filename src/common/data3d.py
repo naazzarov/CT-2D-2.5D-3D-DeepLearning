@@ -44,13 +44,17 @@ def _load_volume(path, nodule_id: str) -> np.ndarray:
 
 def _affine3d(x: torch.Tensor, angle: float, tz: float, ty: float, tx: float,
               scale: float) -> torch.Tensor:
-    """x: (C, D, H, W). In-plane rotation about the z axis only."""
+    """x: (C, D, H, W). In-plane rotation about the z axis only.
+
+    affine_grid orders theta rows and columns as (x, y, z) = (W, H, D), the
+    reverse of the tensor's (D, H, W) layout.
+    """
     th = torch.tensor(angle * np.pi / 180.0, dtype=torch.float32)
     cos, sin = torch.cos(th) / scale, torch.sin(th) / scale
     mat = torch.tensor([
-        [1.0 / scale, 0.0, 0.0, tz],
-        [0.0, cos, -sin, ty],
-        [0.0, sin, cos, tx],
+        [cos, -sin, 0.0, tx],
+        [sin, cos, 0.0, ty],
+        [0.0, 0.0, 1.0 / scale, tz],
     ], dtype=torch.float32).unsqueeze(0)
     grid = F.affine_grid(mat, [1, *x.shape], align_corners=False)
     return F.grid_sample(x.unsqueeze(0), grid, mode="bilinear",

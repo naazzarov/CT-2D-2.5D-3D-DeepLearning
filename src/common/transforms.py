@@ -50,7 +50,7 @@ def augment_supervised(x: torch.Tensor, rng: np.random.Generator,
 
     `strength="none"` disables augmentation entirely (for the no-augmentation
     baseline). `strength="strong"` widens every range and adds random erasing; with only
-    1876 training nodules and an 11.7M-parameter ResNet-18, aggressive
+    1876 training nodules and an 11.2M-parameter ResNet-18, aggressive
     augmentation is one of the few regularisers the frozen protocol allows.
     """
     if strength == "none":

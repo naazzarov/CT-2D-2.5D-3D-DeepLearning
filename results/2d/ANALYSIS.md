@@ -12,7 +12,7 @@ points requested in `README_TEAM_EXPERIMENTS.txt`.
 | **binary supervised** | **0.8323 ± 0.0218** | 0.8357 ± 0.0215 | 0.8304 ± 0.0213 | 0.8790 ± 0.0171 |
 
 Majority-class baselines: 3-class macro F1 0.2138 / accuracy 0.4722;
-binary macro F1 0.3372 / accuracy 0.5598.
+binary macro F1 0.3589 / accuracy 0.5598.
 
 ## Was supervised or MoCo better? Did SSL help?
 
@@ -171,7 +171,7 @@ same hyperparameters, same seeds:
 
 **Important caveat for the final table:** macro-F1 is not directly comparable
 across 2 and 3 classes, because the chance level differs (majority baseline
-0.3372 for binary vs 0.2138 for 3-class). Quoting "+24 points" without that
+0.3589 for binary vs 0.2138 for 3-class). Quoting "+24 points" without that
 caveat overstates the effect. The fair comparisons are **per-class F1 for benign
 and malignant** and **ROC-AUC**, and both still improve substantially: benign F1
 +0.34, malignant F1 +0.14, AUC +0.13. So the conclusion survives the caveat.
